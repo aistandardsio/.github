@@ -1,0 +1,54 @@
+name: Go CI
+
+on:
+  workflow_call:
+    inputs:
+      go-versions:
+        description: 'JSON array of Go versions to test'
+        required: false
+        type: string
+        default: '["1.26.x"]'
+      platforms:
+        description: 'JSON array of platforms to test on'
+        required: false
+        type: string
+        default: '["ubuntu-latest", "macos-latest", "windows-latest"]'
+      test-flags:
+        description: 'Additional flags for go test'
+        required: false
+        type: string
+        default: '-v -covermode=count'
+    secrets:
+      PRIVATE_REPO_TOKEN:
+        description: 'PAT with read access to private aistandardsio repos, for resolving private Go module dependencies (e.g. aisecurity-core). See internal-aistandardsio-system/infrastructure/ci.md.'
+        required: false
+
+permissions:
+  contents: read
+
+env:
+  GOPRIVATE: github.com/aistandardsio/*
+
+jobs:
+  test:
+    strategy:
+      matrix:
+        go-version: ${{ fromJson(inputs.go-versions) }}
+        platform: ${{ fromJson(inputs.platforms) }}
+    runs-on: ${{ matrix.platform }}
+    steps:
+    - name: Install Go
+      uses: actions/setup-go@v6
+      with:
+        go-version: ${{ matrix.go-version }}
+
+    - name: Checkout code
+      uses: actions/checkout@v6
+
+    - name: Configure git for private aistandardsio modules
+      if: ${{ secrets.PRIVATE_REPO_TOKEN != '' }}
+      run: |
+        git config --global url."https://x-access-token:${{ secrets.PRIVATE_REPO_TOKEN }}@github.com/".insteadOf "https://github.com/"
+
+    - name: Run tests
+      run: go test ${{ inputs.test-flags }} ./...

@@ -1,0 +1,67 @@
+name: Go Lint
+
+on:
+  workflow_call:
+    inputs:
+      go-version:
+        description: 'Go version for linting'
+        required: false
+        type: string
+        default: '1.26.x'
+      golangci-lint-version:
+        description: 'golangci-lint version'
+        required: false
+        type: string
+        default: 'latest'
+      timeout:
+        description: 'Lint timeout'
+        required: false
+        type: string
+        default: '3m'
+      args:
+        description: 'Additional golangci-lint arguments'
+        required: false
+        type: string
+        default: '--verbose'
+    secrets:
+      PRIVATE_REPO_TOKEN:
+        description: 'PAT with read access to private aistandardsio repos, for resolving private Go module dependencies (e.g. aisecurity-core). See internal-aistandardsio-system/infrastructure/ci.md.'
+        required: false
+
+permissions:
+  contents: read
+
+env:
+  GOPRIVATE: github.com/aistandardsio/*
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v6
+
+    - name: Configure git for private aistandardsio modules
+      if: ${{ secrets.PRIVATE_REPO_TOKEN != '' }}
+      run: |
+        git config --global url."https://x-access-token:${{ secrets.PRIVATE_REPO_TOKEN }}@github.com/".insteadOf "https://github.com/"
+
+    - name: Checkout shared lint config
+      uses: actions/checkout@v6
+      with:
+        repository: plexusone/.github
+        path: .golangci-shared
+        sparse-checkout: |
+          .golangci.yaml
+        sparse-checkout-cone-mode: false
+
+    - name: Set up Go
+      uses: actions/setup-go@v6
+      with:
+        go-version: ${{ inputs.go-version }}
+
+    - name: golangci-lint
+      uses: golangci/golangci-lint-action@v9
+      with:
+        version: ${{ inputs.golangci-lint-version }}
+        args: --config=${{ github.workspace }}/.golangci-shared/.golangci.yaml --timeout ${{ inputs.timeout }} ${{ inputs.args }}
